@@ -27,16 +27,12 @@ import (
 
 // NewNodeDensity holds node-density workload
 func NewNodeDensity(wh *workloads.WorkloadHelper) *cobra.Command {
-	var podsPerNode int
-	var pprof bool
-	var podReadyThreshold time.Duration
-	var containerImage string
 	var metricsProfiles []string
 	var rc int
 	var iterationsPerNamespace, podsPerNode, churnCycles, churnPercent int
 	var podReadyThreshold, churnDuration, churnDelay time.Duration
 	var containerImage, churnDeletionStrategy string
-	var namespacedIterations, churn bool
+	var namespacedIterations, churn, pprof bool
 	cmd := &cobra.Command{
 		Use:          "node-density",
 		Short:        "Runs node-density workload",
@@ -68,7 +64,6 @@ func NewNodeDensity(wh *workloads.WorkloadHelper) *cobra.Command {
 		PostRun: func(cmd *cobra.Command, args []string) {
 			os.Exit(rc)
 		},
-	}
 	}
 
 	cmd.Flags().BoolVar(&churn, "churn", false, "Enable churning")
