@@ -28,10 +28,11 @@ import (
 
 // NewNodeDensity holds node-density-cni workload
 func NewNodeDensityCNI(wh *workloads.WorkloadHelper) *cobra.Command {
-	var podsPerNode int
-	var namespacedIterations, svcLatency, pprof bool
+	var podsPerNode, iterationsPerNamespace, churnCycles, churnPercent int
+	var churnDelay, churnDuration time.Duration
+	var churnDeletionStrategy string
+	var churn, namespacedIterations, svcLatency, pprof bool
 	var podReadyThreshold time.Duration
-	var iterationsPerNamespace int
 	var metricsProfiles []string
 	var rc int
 	cmd := &cobra.Command{
@@ -44,6 +45,13 @@ func NewNodeDensityCNI(wh *workloads.WorkloadHelper) *cobra.Command {
 			if err != nil {
 				log.Fatal(err)
 			}
+
+			os.Setenv("CHURN", fmt.Sprint(churn))
+			os.Setenv("CHURN_CYCLES", fmt.Sprintf("%v", churnCycles))
+			os.Setenv("CHURN_DURATION", fmt.Sprintf("%v", churnDuration))
+			os.Setenv("CHURN_DELAY", fmt.Sprintf("%v", churnDelay))
+			os.Setenv("CHURN_PERCENT", fmt.Sprint(churnPercent))
+			os.Setenv("CHURN_DELETION_STRATEGY", churnDeletionStrategy)
 			os.Setenv("JOB_ITERATIONS", fmt.Sprint((totalPods-podCount)/2))
 			os.Setenv("PPROF", fmt.Sprint(pprof))
 			os.Setenv("NAMESPACED_ITERATIONS", fmt.Sprint(namespacedIterations))
@@ -59,12 +67,19 @@ func NewNodeDensityCNI(wh *workloads.WorkloadHelper) *cobra.Command {
 			os.Exit(rc)
 		},
 	}
-	cmd.Flags().DurationVar(&podReadyThreshold, "pod-ready-threshold", 1*time.Minute, "Pod ready timeout threshold")
+
+	cmd.Flags().BoolVar(&churn, "churn", false, "Enable churning")
+	cmd.Flags().IntVar(&churnCycles, "churn-cycles", 0, "Churn cycles to execute")
+	cmd.Flags().DurationVar(&churnDuration, "churn-duration", 1*time.Hour, "Churn duration")
+	cmd.Flags().DurationVar(&churnDelay, "churn-delay", 2*time.Minute, "Time to wait between each churn")
+	cmd.Flags().StringVar(&churnDeletionStrategy, "churn-deletion-strategy", "gvr", "Churn deletion strategy to use")
+	cmd.Flags().IntVar(&churnPercent, "churn-percent", 10, "Percentage of job iterations that kube-burner will churn each round")
+        cmd.Flags().DurationVar(&podReadyThreshold, "pod-ready-threshold", 1*time.Minute, "Pod ready timeout threshold")
 	cmd.Flags().IntVar(&podsPerNode, "pods-per-node", 245, "Pods per node")
 	cmd.Flags().BoolVar(&pprof, "pprof", false, "Enable pprof collection")
 	cmd.Flags().BoolVar(&namespacedIterations, "namespaced-iterations", true, "Namespaced iterations")
 	cmd.Flags().IntVar(&iterationsPerNamespace, "iterations-per-namespace", 1000, "Iterations per namespace")
 	cmd.Flags().BoolVar(&svcLatency, "service-latency", false, "Enable service latency measurement")
-	cmd.Flags().StringSliceVar(&metricsProfiles, "metrics-profile", []string{"metrics.yml"}, "Comma separated list of metrics profiles to use")
+        cmd.Flags().StringSliceVar(&metricsProfiles, "metrics-profile", []string{"metrics.yml"}, "Comma separated list of metrics profiles to use")
 	return cmd
 }
