@@ -93,12 +93,16 @@ jobs:
       k8s.ovn.org/primary-user-defined-network: ""
     measurements:
       - name: cudnLatency
+{{ if .VIRT }}
+      - name: vmiLatency
+{{ else }}
       - name: podLatency
 {{ if ne .POD_READY_THRESHOLD 0 }}
         thresholds:
           - conditionType: Ready
             metric: P99
             threshold: {{.POD_READY_THRESHOLD}}
+{{ end }}
 {{ end }}
     churnConfig:
       cycles: {{.CHURN_CYCLES}}
@@ -259,6 +263,30 @@ jobs:
           nodeGwMap: '{{.NODE_GW_MAP}}'
 {{ end }}
 
+{{ if .VIRT }}
+{{ if .SSH_CHECK }}
+      - objectTemplate: secret_ssh_public.yml
+        replicas: 1
+        inputVars:
+          name: cudn-density-ssh
+          publicKeyPath: {{ .publicKey }}
+
+      - objectTemplate: vm-cudn-ssh.yml
+        replicas: 1
+        group:
+          id: 2
+        inputVars:
+          vmImage: {{.VM_IMAGE}}
+          sshPublicKeySecret: cudn-density-ssh
+{{ else }}
+      - objectTemplate: vm-cudn.yml
+        replicas: 1
+        group:
+          id: 2
+        inputVars:
+          vmImage: {{.VM_IMAGE}}
+{{ end }}
+{{ else }}
       - objectTemplate: deployment-server.yml
         replicas: 1
         group:
@@ -282,6 +310,18 @@ jobs:
           namespaces_per_cudn: {{.NAMESPACES_PER_CUDN}}
           gatewayCheck: {{.GATEWAY_CHECK}}
           nodeGwMap: '{{ if .GATEWAY_CHECK }}{{.NODE_GW_MAP}}{{ end }}'
+          gatewayIP: "{{ if .GATEWAY_CHECK }}{{.GATEWAY_IP}}{{ end }}"
+{{ end }}
+
+{{ if .GATEWAY_CHECK }}
+      - objectTemplate: np-allow-gateway-egress.yml
+        replicas: 1
+        churn: false
+        group:
+          id: 2
+        inputVars:
+          gatewayIP: {{.GATEWAY_IP}}
+{{ end }}
 
 {{ if .GC }}
   - name: cudn-density-cleanup-namespaces

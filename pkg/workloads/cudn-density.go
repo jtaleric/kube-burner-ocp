@@ -20,6 +20,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cloud-bulldozer/go-commons/v2/ssh"
 	"github.com/kube-burner/kube-burner/v2/pkg/config"
 	kubeburnermeasurements "github.com/kube-burner/kube-burner/v2/pkg/measurements"
 	"github.com/kube-burner/kube-burner/v2/pkg/workloads"
@@ -29,6 +30,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kube-burner/kube-burner-ocp/pkg/measurements"
+)
+
+const (
+	cudnDensitySSHKeyFileName = "ssh"
+	cudnDensityTmpDirPattern  = "kube-burner-cudn-density-*"
 )
 
 var cudnMeasurementFactoryMap = map[string]kubeburnermeasurements.NewMeasurementFactory{
@@ -101,9 +107,9 @@ func NewCudnDensity(wh *workloads.WorkloadHelper) *cobra.Command {
 	var churnPercent, churnCycles, iterations, namespacesPerCudn, cudnsPerRA, incrementalStepSize int
 	var incrementalExpBase float64
 	var deletionStrategy string
-	var l3, pprof, gatewayCheck, bgp, ocpbugs85627Workaround bool
+	var l3, pprof, gatewayCheck, bgp, virt, ocpbugs85627Workaround bool, sshCheck bool
 	var churnDelay, churnDuration, podReadyThreshold, pprofInterval, jobPause, incrementalStepDelay time.Duration
-	var churnMode, incrementalPattern string
+	var churnMode, incrementalPattern, vmImage, sshKeyPairPath string
 	var metricsProfiles []string
 	var rc int
 	cmd := &cobra.Command{
@@ -154,12 +160,26 @@ func NewCudnDensity(wh *workloads.WorkloadHelper) *cobra.Command {
 			} else {
 				log.Info("Layer 2 topology enabled")
 			}
+			if virt {
+				log.Info("Virtual machine workload enabled")
+			}
 			if churnDuration > 0 || churnCycles > 0 {
 				log.Infof("Churn is enabled (mode: %s)", churnMode)
 			}
 			if incrementalStepSize > 0 {
 				log.Infof("Incremental load enabled: pattern %s, step size %d namespaces (%d CUDNs), delay %v",
 					incrementalPattern, incrementalStepSize, incrementalStepSize/namespacesPerCudn, incrementalStepDelay)
+			}
+
+			var privateKeyPath, publicKeyPath string
+			if virt && sshCheck {
+				var err error
+				privateKeyPath, publicKeyPath, err = ssh.GenerateSSHKeyPair(sshKeyPairPath, cudnDensityTmpDirPattern, cudnDensitySSHKeyFileName)
+				if err != nil {
+					log.Fatalf("Failed to generate SSH keys for the test - %v", err)
+				}
+				AdditionalVars["privateKey"] = privateKeyPath
+				AdditionalVars["publicKey"] = publicKeyPath
 			}
 
 			AdditionalVars["PPROF"] = pprof
@@ -183,6 +203,9 @@ func NewCudnDensity(wh *workloads.WorkloadHelper) *cobra.Command {
 			AdditionalVars["BGP"] = bgp
 			AdditionalVars["OCPBUGS_85627_WORKAROUND"] = ocpbugs85627Workaround
 			AdditionalVars["DELETION_STRATEGY"] = deletionStrategy
+			AdditionalVars["VIRT"] = virt
+			AdditionalVars["VM_IMAGE"] = vmImage
+			AdditionalVars["SSH_CHECK"] = sshCheck
 			if gatewayCheck {
 				AdditionalVars["NODE_GW_MAP"] = getNodeGatewayMap()
 			}
@@ -214,6 +237,10 @@ func NewCudnDensity(wh *workloads.WorkloadHelper) *cobra.Command {
 	cmd.Flags().BoolVar(&gatewayCheck, "gateway-check", false, "Enable default gateway reachability check from each namespace")
 	cmd.Flags().BoolVar(&ocpbugs85627Workaround, "static-mac-binding-workaround", false, "Deploy OCPBUGS-85627 static MAC binding workaround DaemonSet before creating CUDNs")
 	cmd.Flags().StringVar(&deletionStrategy, "deletion-strategy", config.DefaultDeletionStrategy, "GC deletion mode, default deletes entire namespaces and gvr deletes objects within namespaces before deleting the parent namespace")
+	cmd.Flags().BoolVar(&virt, "virt", false, "Deploy VMs instead of pods")
+	cmd.Flags().StringVar(&vmImage, "vm-image", "quay.io/openshift-cnv/qe-cnv-tests-fedora:40", "VM image to deploy (only used with --virt)")
+	cmd.Flags().BoolVar(&sshCheck, "ssh-check", false, "Enable SSH key injection for VMs (only used with --virt)")
+	cmd.Flags().StringVar(&sshKeyPairPath, "ssh-key-path", "", "Path to save the generated SSH keys (only used with --virt --ssh-check)")
 	cmd.Flags().StringSliceVar(&metricsProfiles, "metrics-profile", []string{"metrics.yml"}, "Comma separated list of metrics profiles to use")
 	cmd.MarkFlagRequired("iterations")
 	return cmd
