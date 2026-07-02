@@ -1,0 +1,34 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: vm-cudn-{{.Iteration}}-{{.Replica}}
+  labels:
+    kubevirt.io/os: fedora
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        kubevirt.io/os: fedora
+    spec:
+      terminationGracePeriodSeconds: 0
+      domain:
+        resources:
+          requests:
+            memory: 512Mi
+        devices:
+          disks:
+          - name: containerdisk
+            disk:
+              bus: virtio
+          interfaces:
+          - name: primary-udn-net
+            masquerade: {}
+      networks:
+      - name: primary-udn-net
+        pod: {}
+      volumes:
+      - name: containerdisk
+        containerDisk:
+          image: {{.vmImage}}
+          imagePullPolicy: IfNotPresent
